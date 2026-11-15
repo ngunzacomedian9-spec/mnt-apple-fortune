@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#10251d">
+<title>MNT Apple Predictor — Analyse</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1712;--panel:#14271e;--line:#2d4939;--muted:#a8b9ad;--green:#35b76b;--red:#d85c54;--gold:#e7bd63}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#10271d,#08110d 65%);color:#f4f7f4;font:16px system-ui, sans-serif}
+main{max-width:720px;margin:auto;padding:20px 14px 42px}
+header{text-align:center;padding:14px 4px 20px}h1{font-size:25px;margin:0 0 5px;letter-spacing:.3px}header p,.muted{color:var(--muted);font-size:13px}
+.panel{background:rgba(20,39,30,.96);border:1px solid var(--line);border-radius:16px;padding:15px;margin:12px 0}
+h2{font-size:17px;margin:0 0 10px}.hint{font-size:13px;color:var(--muted);line-height:1.45}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:10px 0}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px}.apple{background:var(--green)}.trap{background:var(--red)}.unknown{background:#64756a}
+.grid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px}
+.cell{min-height:55px;border:1px solid #52675a;border-radius:11px;background:#293a30;color:white;font-size:12px;font-weight:700;padding:5px 2px}
+.cell.safe{background:#17633b;border-color:#40c77a}.cell.bad{background:#7d302d;border-color:#ed766d}
+.cell small{display:block;font-weight:400;opacity:.85;margin-top:3px}
+button.action{border:0;border-radius:11px;background:var(--green);color:#062012;font-weight:800;padding:13px 15px;font-size:15px;width:100%;margin-top:12px}
+button.secondary{background:#30483a;color:#fff}button.danger{background:#58302d;color:#fff}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.stat{background:#0d1d15;border:1px solid var(--line);padding:11px;border-radius:12px}.stat b{display:block;font-size:21px}.stat span{font-size:11px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{text-align:left;padding:8px 5px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}
+.round{padding:10px 0;border-bottom:1px solid var(--line);font-size:13px}.round:last-child{border:0}
+.note{border-left:3px solid var(--gold);padding:9px 11px;background:#2c291b;border-radius:6px;color:#f1dfb5;font-size:12px;line-height:1.45}
+footer{text-align:center;color:var(--muted);font-size:11px;padding:15px}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>🍎 MNT APPLE PREDICTOR</h1>
+  <p>Module 1 · Enregistrement et analyse des parties</p>
+</header>
+<section class="panel">
+  <h2>1. Enregistrer une partie</h2>
+  <p class="hint">Touchez chaque case révélée pour indiquer ce que vous avez réellement vu. Touchez une fois pour POMME, deux fois pour PIÈGE, trois fois pour revenir à INCONNU. Laissez les cases non révélées sur INCONNU.</p>
+  <div class="legend"><span><i class="dot apple"></i>Pomme</span><span><i class="dot trap"></i>Piège</span><span><i class="dot unknown"></i>Non révélé</span></div>
+  <div id="grid" class="grid" aria-label="Grille de sept rangées et cinq colonnes"></div>
+  <button class="action" id="save">Enregistrer cette partie</button>
+  <button class="action secondary" id="reset">Effacer la saisie en cours</button>
+</section>
+<section class="panel">
+  <h2>2. Statistiques enregistrées</h2>
+  <div class="stats">
+    <div class="stat"><b id="games">0</b><span>Parties enregistrées</span></div>
+    <div class="stat"><b id="apples">0</b><span>Pommes observées</span></div>
+    <div class="stat"><b id="traps">0</b><span>Pièges observés</span></div>
+  </div>
+  <h2 style="margin-top:17px">Observations par colonne</h2>
+  <p class="hint">Fréquences calculées uniquement sur les cases que tu as renseignées.</p>
+  <table><thead><tr><th>Colonne</th><th>Pommes</th><th>Pièges</th><th>Observées</th></tr></thead><tbody id="columns"></tbody></table>
+</section>
+<section class="panel">
+  <h2>3. Historique</h2>
+  <div id="history" class="hint">Aucune partie enregistrée pour le moment.</div>
+  <button class="action danger" id="delete">Supprimer tout l'historique</button>
+</section>
+<div class="note"><b>À savoir :</b> cet outil est un carnet d'observation, pas un prédicteur certain. Si le jeu utilise un générateur aléatoire, les résultats passés ne révèlent pas les prochaines cases. Les fréquences ne sont pas des probabilités fiables pour le prochain tour.</div>
+<footer>Les données restent dans le stockage local de ce navigateur sur cet appareil. Elles peuvent disparaître si les données du navigateur sont effacées.</footer>
+</main>
+<script>
+const KEY='mntAppleRoundsV1';
+let current=Array.from({length:7},()=>Array(5).fill(0));
+let rounds=load();
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'[]')}catch(e){return []}}
+function persist(){localStorage.setItem(KEY,JSON.stringify(rounds))}
+function drawGrid(){
+ const el=document.getElementById('grid');el.innerHTML='';
+ current.forEach((row,r)=>row.forEach((v,c)=>{
+  const b=document.createElement('button');b.className='cell '+(v===1?'safe':v===2?'bad':'');
+  b.innerHTML=`R${r+1} · C${c+1}<small>${v===1?'POMME':v===2?'PIÈGE':'INCONNU'}</small>`;
+  b.setAttribute('aria-label',`Rangée ${r+1}, colonne ${c+1}, ${v===1?'pomme':v===2?'piège':'inconnu'}`);
+  b.onclick=()=>{current[r][c]=(current[r][c]+1)%3;drawGrid()};el.appendChild(b);
+ }));
+}
+function render(){
+ const vals=rounds.flatMap(x=>x.cells);const a=vals.filter(x=>x===1).length,t=vals.filter(x=>x===2).length;
+ document.getElementById('games').textContent=rounds.length;
+ document.getElementById('apples').textContent=a;document.getElementById('traps').textContent=t;
+ const body=document.getElementById('columns');body.innerHTML='';
+ for(let c=0;c<5;c++){let ac=0,tc=0;rounds.forEach(x=>x.cells.forEach((v,i)=>{if(i%5===c){if(v===1)ac++;if(v===2)tc++}}));
+ let tr=document.createElement('tr');tr.innerHTML=`<td>${c+1}</td><td>${ac}</td><td>${tc}</td><td>${ac+tc}</td>`;body.appendChild(tr)}
+ const h=document.getElementById('history');h.innerHTML='';
+ if(!rounds.length){h.textContent='Aucune partie enregistrée pour le moment.';return}
+ [...rounds].reverse().forEach((x,i)=>{let d=document.createElement('div');d.className='round';d.textContent=`Partie ${rounds.length-i} · ${x.date} · ${x.cells.filter(v=>v===1).length} pommes · ${x.cells.filter(v=>v===2).length} pièges · ${x.cells.filter(v=>v===0).length} non révélées`;h.appendChild(d)});
+}
+document.getElementById('save').onclick=()=>{
+ if(current.flat().every(v=>v===0)){alert('Indique au moins une case réellement révélée avant l’enregistrement.');return}
+ rounds.push({date:new Date().toLocaleString('fr-FR'),cells:current.flat()});persist();
+ current=Array.from({length:7},()=>Array(5).fill(0));drawGrid();render();alert('Partie enregistrée !');
+};
+document.getElementById('reset').onclick=()=>{current=Array.from({length:7},()=>Array(5).fill(0));drawGrid()};
+document.getElementById('delete').onclick=()=>{if(confirm('Supprimer définitivement toutes les parties enregistrées sur cet appareil ?')){rounds=[];persist();render()}};
+drawGrid();render();
+</script>
+</body></html>
